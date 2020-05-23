@@ -6,7 +6,13 @@
 
     <groupId>org.example</groupId>
     <artifactId>LearnDubbo</artifactId>
+    <packaging>pom</packaging>
     <version>1.0-SNAPSHOT</version>
+    <modules>
+        <module>user-service-provider</module>
+        <module>order-service-consumer</module>
+        <module>common-api</module>
+    </modules>
 
 
 </project>

@@ -105,8 +105,6 @@
 
 - [mac启动zookeeper单机模式 - 简书](https://www.jianshu.com/p/b889b86536be)
 
-
-
 ## 2 Dubbo实践
 
 - 创建两个服务模块进行测试：![eaxxHp](https://gitee.com/pxqp9W/testmarkdown/raw/master/imgs/2020/05/eaxxHp.png)
@@ -238,8 +236,6 @@
 
 - 在Dubbo-admin中查看服务是否注册成功：![8jltRf](https://gitee.com/pxqp9W/testmarkdown/raw/master/imgs/2020/05/8jltRf.png)
 
-
-
 ### 2.4 编写服务消费者order-service-consumer
 
 - 同样引入POM依赖
@@ -255,7 +251,7 @@
   
       <!--开启注解扫描-->
       <context:component-scan base-package="org.example.service.impl"></context:component-scan>
-      
+  
       <!-- 1、指定当前应用的名字（同样的服务名字相同，不要和别的服务同名） -->
       <dubbo:application name="order-service-consumer"  />
   
@@ -291,7 +287,310 @@
 
 
 
-### 2.6 dubbo-simple-monitor
+### 2.6 整合SpringBoot的过程
+
+- （一）创建`boot-user-service-provider`模块，作为生产者模块，复制之前的类到其中即可
+
+- （二）创建`boot-order-service-consumer`模块作为消费者模块，复制之前的类到其中即可
+
+- （三）在`boot-user-service-provider`模块中导入POM依赖：
+  
+  ```xml
+          <!--dubbo-->
+          <dependency>
+              <groupId>org.apache.dubbo</groupId>
+              <artifactId>dubbo-spring-boot-starter</artifactId>
+              <version>2.7.4.1</version>
+          </dependency>
+  
+          <!--apache.curator-->
+          <dependency>
+              <groupId>org.apache.curator</groupId>
+              <artifactId>curator-framework</artifactId>
+              <version>2.12.0</version>
+          </dependency>
+          <dependency>
+              <groupId>org.apache.curator</groupId>
+              <artifactId>curator-recipes</artifactId>
+              <version>2.8.0</version>
+          </dependency>
+  ```
+
+- （三）使用SpringBoot的配置方式修改`boot-user-service-provider`
+  
+  - 1、在`boot-user-service-provider`的application.properties中配置:
+    
+    ```properties
+    dubbo.application.name=boot-user-service-provider
+    dubbo.registry.address=127.0.0.1:2181
+    dubbo.registry.protocol=zookeeper
+    dubbo.protocol.name=dubbo
+    dubbo.protocol.port=20880
+    ```
+  
+  - 2、在`boot-user-service-provider`中需要的暴露的服务
+    
+    ```java
+    @Service // 注意这个注解是dubbo的，用来暴露服务
+    @Component
+    public class UserServiceImpl implements UserService {
+        public List<UserAddress> getUserAddressList(String userId) {
+            UserAddress userAddress1 = new UserAddress(1, "北京中南海", "1", "小明", "13666666666", "Yes");
+            UserAddress userAddress2 = new UserAddress(2, "上海外滩", "1", "小明", "13666666666", "Yes");
+            return Arrays.asList(userAddress1, userAddress2);
+        }
+    }
+    ```
+  
+  - 3、在`boot-user-service-provider`的主启动类上`@EnableDubbo`
+
+- （四) SpringBoot的配置方式修改`boot-user-service-provider`
+  
+  - 1、引入同样的POM依赖
+  
+  - 2、修改application.properties：
+    
+    ```properties
+    dubbo.application.name=boot-order-service-consumer
+    dubbo.registry.address=127.0.0.1:2181
+    dubbo.registry.protocol=zookeeper
+    dubbo.protocol.name=dubbo
+    dubbo.protocol.port=20880
+    // 不和dubbo-admin冲突
+    server.port=8081 
+    ```
+  
+  - 3、使用`@Reference`注解在OrderServiceImpl中引用UserService服务:
+  
+  ```java
+  @Service // 将整个OrderServiceImpl注入到IOC容器中
+  public class OrderServiceImpl implements OrderService {
+  
+      //@Autowired
+      @Reference //dubbo提供的注解
+      UserService userService;
+  
+      public List<UserAddress> initOrder(String userId) {
+          System.out.println("用户id:" + userId);
+          // 查询用户的收货地址，需要调用user-service-provider的服务
+          List<UserAddress> userAddressList = userService.getUserAddressList(userId);
+          for (UserAddress userAddress: userAddressList) {
+              System.out.println(userAddress.getUserAddress());
+          }
+          return userAddressList;
+      }
+  }
+  ```
+  
+  - 4、在主启动类上`@EnableDubbo`
+
+- （五）启动并测试
+  
+  ![qiSwUL](https://gitee.com/pxqp9W/testmarkdown/raw/master/imgs/2020/05/qiSwUL.png)
+  
+  ![PUigEj](https://gitee.com/pxqp9W/testmarkdown/raw/master/imgs/2020/05/PUigEj.png)
+
+
+
+
+
+## 3 Dubbo配置
+
+[dubbo xml配置](https://dubbo.apache.org/zh-cn/docs/user/configuration/xml.html)
+
+[dubbo properties配置](https://dubbo.apache.org/zh-cn/docs/user/configuration/properties.html)
+
+- 属性配置的优先级：![8x3VAj](https://gitee.com/pxqp9W/testmarkdown/raw/master/imgs/2020/05/8x3VAj.jpg)
+  
+  - 优先级从高到低：
+    
+    - JVM -D参数，当你部署或者启动应用时，它可以轻易地重写配置，比如，改变dubbo协议端口；
+    
+    - XML, XML中的当前配置会重写dubbo.properties中的；
+    
+    - Properties，默认配置，仅仅作用于以上两者没有配置时。
+
+### 3.1 启动时检查
+
+[preflight-check](https://dubbo.apache.org/zh-cn/docs/user/demos/preflight-check.html)
+
+- Dubbo 缺省会在启动时检查依赖的服务是否可用，不可用时会抛出异常，阻止 Spring 初始化完成，以便上线时，能及早发现问题，默认 `check="true"`。
+
+- 可以通过 `check="false"` 关闭检查，比如，测试时，有些服务不关心，或者出现了循环依赖，必须有一方先启动。
+
+- 如果你的 Spring 容器是懒加载的，或者通过 API 编程延迟引用服务，请关闭 check，否则服务临时不可用时，会抛出异常，拿到 null 引用，如果 `check="false"`，总是会返回引用，当服务恢复时，能自动连上。
+
+### 3.2 超时设置
+
+- 由于网络或服务端不可靠，会导致调用出现一种不确定的中间状态（超时）。为了避免超时导致客户端资源（线程）挂起耗尽，必须设置超时时间。
+
+- 单个接口设置超时：`<dubbo:reference id="userService" interface="org.example.service.UserService" timeout="5000"/>`
+
+- 全局设置超时：`<dubbo:consumer timeout="5000"/>`
+
+
+
+### 3.3 重试次数（幂等性）
+
+> 幂等方法（查询、删除）上要设置重试次数，非幂等方法（增加）不能设置重试次数
+
+- 远程服务调用重试次数，不包括第一次调用，不需要重试请设为0
+
+- 缺省使用<dubbo:consumer>的retries
+
+- `<dubbo:consumer check="false" timeout="5000" retries="3"/>`
+
+- **幂等性概念**: 在编程中.一个幂等操作的特点是其任意多次执行所产生的影响均与一次执行的影响相同。幂等函数，或幂等方法，是指可以使用相同参数重复执行，并能获得相同结果的函数。这些函数不会影响系统状态，也不用担心重复执行会对系统造成改变。
+
+- [高并发下接口幂等性解决方案 - Ruthless - 博客园](https://www.cnblogs.com/linjiqin/p/9678022.html)
+
+
+
+### 3.4 多版本（灰度发布）
+
+[multi-versions](https://dubbo.apache.org/zh-cn/docs/user/demos/multi-versions.html)
+
+- 当一个接口实现，出现不兼容升级时，可以用版本号过渡，版本号不同的服务相互间不引用。可以按照以下的步骤进行版本迁移：
+  
+  0. 在低压力时间段，先升级一半提供者为新版本
+  1. 再将所有消费者升级为新版本
+  2. 然后将剩下的一半提供者升级为新版本
+
+
+
+### 3.5 本地存根
+
+[local-stub](https://dubbo.apache.org/zh-cn/docs/user/demos/local-stub.html)
+
+[什么是桩代码（Stub）？ - 知乎](https://www.zhihu.com/question/24844900)
+
+
+
+- 远程服务后，客户端通常只剩下接口，而实现全在服务器端，但**提供方有些时候想在客户端也执行部分逻辑**，比如：做 ThreadLocal 缓存，提前验证参数，调用失败后伪造容错数据等等，此时就需要在 API 中带上 Stub，客户端生成 Proxy 实例，会把 Proxy 通过构造函数传给 Stub [[1]](https://dubbo.apache.org/zh-cn/docs/user/demos/local-stub.html#fn1)，然后把 Stub 暴露给用户，Stub 可以决定要不要去调 Proxy。
+
+- `<dubbo:service interface="com.foo.BarService" stub="com.foo.BarServiceStub" />`
+
+
+
+
+
+### 3.6 配置覆盖关系
+
+- 以 timeout 为例，下图显示了配置的查找顺序，其它 retries, loadbalance, actives 等类似：
+  
+  - 优先级总结：**方法级优先，接口级次之，全局配置再次之**。**如果级别一样，则消费方优先，提供方次之**
+  
+  - ![OPQ28F](https://gitee.com/pxqp9W/testmarkdown/raw/master/imgs/2020/05/OPQ28F.jpg)
+  
+  
+
+## 4 Dubbo整合SpringBoot的三种方式
+
+
+
+### 4.1 注解配置
+
+- [注解配置](https://dubbo.apache.org/zh-cn/docs/user/configuration/annotation.html)
+
+- 1、导入dubbo-starter
+
+- 2、在application.yml总配置属性
+
+- 3、使用@Service在生产者中暴露服务
+
+- 4、使用@Reference在消费者中来引用服务
+
+- 5、在主启动类要上@EnableDubbo
+
+
+
+> 在注解中可以配置相关设置
+
+
+
+### 4.2 XMl配置
+
+- [xml配置](https://dubbo.apache.org/zh-cn/docs/user/configuration/xml.html)
+
+- 1、导入dubbo-starter
+
+- 2、编写provider.xml和consumer.xml配置文件来替代application.yaml
+
+- 3、在主启动类上`@ImportResource(locations="classpath:provider.xml")`来导入XML配置文件
+
+
+
+### 4.3 使用注解API
+
+- [api](https://dubbo.apache.org/zh-cn/docs/user/configuration/api.html)
+
+- 将每一个组建手动创建到容器中：
+
+```java
+@Configuration
+public class MyDubboConfig {
+	
+	@Bean
+	public ApplicationConfig applicationConfig() {
+		ApplicationConfig applicationConfig = new ApplicationConfig();
+		applicationConfig.setName("boot-user-service-provider");
+		return applicationConfig;
+	}
+	
+	//<dubbo:registry protocol="zookeeper" address="127.0.0.1:2181"></dubbo:registry>
+	@Bean
+	public RegistryConfig registryConfig() {
+		RegistryConfig registryConfig = new RegistryConfig();
+		registryConfig.setProtocol("zookeeper");
+		registryConfig.setAddress("127.0.0.1:2181");
+		return registryConfig;
+	}
+	
+	//<dubbo:protocol name="dubbo" port="20882"></dubbo:protocol>
+	@Bean
+	public ProtocolConfig protocolConfig() {
+		ProtocolConfig protocolConfig = new ProtocolConfig();
+		protocolConfig.setName("dubbo");
+		protocolConfig.setPort(20882);
+		return protocolConfig;
+	}
+	
+	/**
+	 *<dubbo:service interface="com.atguigu.gmall.service.UserService" 
+		ref="userServiceImpl01" timeout="1000" version="1.0.0">
+		<dubbo:method name="getUserAddressList" timeout="1000"></dubbo:method>
+	</dubbo:service>
+	 */
+	@Bean
+	public ServiceConfig<UserService> userServiceConfig(UserService userService){
+		ServiceConfig<UserService> serviceConfig = new ServiceConfig<>();
+		serviceConfig.setInterface(UserService.class);
+		serviceConfig.setRef(userService);
+		serviceConfig.setVersion("1.0.0");
+		
+		//配置每一个method的信息
+		MethodConfig methodConfig = new MethodConfig();
+		methodConfig.setName("getUserAddressList");
+		methodConfig.setTimeout(1000);
+		
+		//将method的设置关联到service配置中
+		List<MethodConfig> methods = new ArrayList<>();
+		methods.add(methodConfig);
+		serviceConfig.setMethods(methods);
+		
+		//ProviderConfig
+		//MonitorConfig
+		
+		return serviceConfig;
+	}
+}
+```
+
+- 在主启动类上设置扫描包的路径：`@EnableDubbo(scanBasePackages="com.me.xxx")`
+  
+  
+
+
 
 
 
@@ -301,9 +600,26 @@
 
 ## 参考资料
 
+- [尚硅谷Dubbo教程(dubbo经典之作)_哔哩哔哩 (゜-゜)つロ 干杯~-bilibili](https://www.bilibili.com/video/BV1ns411c7jV?from=search&seid=5064141967898877577)
+
 - [Dubbo 中文文档](http://dubbo.apache.org/zh-cn/docs/user/new-features-in-a-glance.html)
+
 - [Home · apache/dubbo Wiki](https://github.com/apache/dubbo/wiki)
+
 - [ORM 实例教程 - 阮一峰的网络日志](https://www.ruanyifeng.com/blog/2019/02/orm-tutorial.html)
+
 - [软负载和硬负载 - 晨猫 - OSCHINA](https://my.oschina.net/mengzhang6/blog/1635069)
+
 - [mac启动zookeeper单机模式 - 简书](https://www.jianshu.com/p/b889b86536be)
-- 
+
+- [dubbo xml配置](https://dubbo.apache.org/zh-cn/docs/user/configuration/xml.html)
+
+- [dubbo properties配置](https://dubbo.apache.org/zh-cn/docs/user/configuration/properties.html)
+
+- [分布式高并发系统如何保证对外接口的幂等性？ - 知乎](https://www.zhihu.com/question/27744795)
+
+- [高并发下接口幂等性解决方案 - Ruthless - 博客园](https://www.cnblogs.com/linjiqin/p/9678022.html)
+
+- [什么是桩代码（Stub）？ - 知乎](https://www.zhihu.com/question/24844900)
+  
+  

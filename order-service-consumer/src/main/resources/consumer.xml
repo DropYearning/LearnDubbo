@@ -14,6 +14,10 @@
     <dubbo:registry address="zookeeper://127.0.0.1:2181" />
     <dubbo:protocol name="dubbo" port="20880" />
     <!-- 3、声明需要调用的远程接口，生成远程服务代理-->
-    <dubbo:reference id="userService" interface="org.example.service.UserService" />
+    <!--关闭启动时检查-->
+    <dubbo:reference id="userService" interface="org.example.service.UserService" timeout="5000"/>
+
+    <!--关闭所有服务的启动时检查 (没有提供者时报错)：-->
+    <dubbo:consumer check="false" timeout="5000" retries="3"/>
 
 </beans>
